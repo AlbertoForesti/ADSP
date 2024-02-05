@@ -3,4 +3,8 @@ xgboost==2.0.3
 sktime==0.24.2
 numpy
 pandas
+sklearn
+scipy
+networkx
+lingam
 geopandas==0.14.1
