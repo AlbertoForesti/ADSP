@@ -7,7 +7,9 @@ import networkx as nx
 import seaborn as sns
 from abc import ABC, abstractmethod
 from copy import copy
-from scipy.stats import gaussian_kde
+from scipy.stats import gaussian_kde, iqr
+from sklearn.decomposition import PCA
+
 
 class BaseKernel(ABC):
 
@@ -30,7 +32,7 @@ class BaseKernel(ABC):
             if pd.api.types.is_integer_dtype(t):
                 coeffs.append(1)
             elif pd.api.types.is_float_dtype(t):
-                coeffs.append(1.06*np.var(X[:,i])*(len(X))**(-0.2)) # Silverman rule of thumb
+                coeffs.append(1.06*np.std(X[:,i])*(len(X))**(-0.2)) # Silverman rule of thumb
             else:
                 raise TypeError(f'{t} not supported {X[:,i]}')
         return coeffs
@@ -40,7 +42,7 @@ class BaseKernel(ABC):
         kfs = []
         for i, t in enumerate(types):
             if pd.api.types.is_integer_dtype(t):
-                kfs.append(lambda x: np.array([1 if x_i==0 else 0 for x_i in x]))
+                kfs.append(np.vectorize(lambda x: 1 if x==0 else 0 ))
             elif pd.api.types.is_float_dtype(t):
                 kfs.append(lambda x: np.power(2*np.pi, -0.5)*np.exp(-np.power(x, 2)/2))
             else:
@@ -94,7 +96,7 @@ class ProductKernel(BaseKernel):
         '''Compute the gradient squared error for estimated probabilities.'''
         y = dtrain.get_label()
         ret = self.predict(predt).reshape((-1,))-y
-        print('y is ', y)
+        print('y is ', y, 'ret is', ret)
         return ret
     
     def hessian(self, predt: np.ndarray, dtrain: xgb.DMatrix) -> np.ndarray:
@@ -110,21 +112,14 @@ class GraphKernel(BaseKernel):
     def __init__(self) -> None:
         pass
 
-    def fit(self, X: np.ndarray, causal_graph: 'nx.Digraph', kernel_functions: Optional[Iterable[Callable]] = None, kernel_coefficients: Optional[Union[Iterable[float], str]] = None):
+    def fit(self, X: np.ndarray, causal_graph: 'nx.Digraph'):
         self.X = X
+        self.kernel_functions = self.infer_kernel_from_data(X)
+        self.kernel_coefficients = self.infer_kernel_coefficients_from_data(X)
+        self._causal_graph = copy(causal_graph)
+        self.feature_list = list(nx.topological_sort(causal_graph))
 
-        if kernel_functions is None:
-            self.kernel_functions = self.infer_kernel_from_data(X)
-
-        if isinstance(kernel_coefficients, str):
-            if kernel_coefficients == 'silverman':
-                self.kernel_coefficients = self.infer_kernel_coefficients_from_data(X)
-            else:
-                self.kernel_coefficients = None
-        
-        feature_list = list(nx.topological_sort(causal_graph))
-
-        nx.set_node_attributes(causal_graph, {feat: lambda x: self.base_kf(x, feat, causal_graph) for feat in feature_list}, name='kernel')
+        nx.set_node_attributes(self._causal_graph, {feat: lambda x: self.base_kf(x, feat, causal_graph) for feat in self.feature_list}, name='kernel')
         
         self._causal_graph = causal_graph
     
@@ -135,9 +130,13 @@ class GraphKernel(BaseKernel):
         for feat in preceding_features:
             coeff = self.kernel_coefficients[feat]
             try:
+                """print('Kernel funcs', len(self.kernel_functions))
+                print('x is ', x)   
+                print('feat is ', feat)
+                print('preceding features are ', list(preceding_features))"""
                 partial_res = self.kernel_functions[feat](x[feat]/coeff)/coeff
             except:
-                raise IndexError(f'Out of bound: current feature={str(feat)}, sample={str(x)}, preceding features={str(list(preceding_features))}, origin feature={feature}, feature topo order = {list(nx.topological_sort(causal_graph))}, feature preceding 2 = {list(causal_graph.predecessors(2))}')
+                raise IndexError(f'Out of bound: current feature={feature}, current feature in loop={str(feat)}, sample={str(x)}, preceding features={str(list(preceding_features))}, origin feature={feature}, feature topo order = {list(nx.topological_sort(causal_graph))}, feature preceding 2 = {list(causal_graph.predecessors(2))}')
             prod*=partial_res
         return prod
 
@@ -174,16 +173,23 @@ def train_domain_shifter(d1: 'pd.DataFrame', d2: 'pd.DataFrame'):
             continue
         pk = ProductKernel()
         print(f'Fitting {column}')
-        pk.fit(pd.DataFrame(d2[column]))
+        try:
+            pk.fit(pd.DataFrame(d2[column]))
+        except:
+            print(f'Could not fit {column}')
+            continue
         pk_d1 = ProductKernel()
         pk_d1.fit(pd.DataFrame(d1[column]))
         y_train = np.array(d2[column].sample(len(d1), replace=True))
         # y_train = pk.predict(y_train)
         dtrain = xgb.DMatrix(d1, y_train)
-        reg = xgb.train({'tree_method': 'hist', 'seed': 1994, 'eta': 1e-1},  # any other tree method is fine.
+        """reg = xgb.train({'tree_method': 'hist', 'seed': 1994, 'eta': 1e-1},  # any other tree method is fine.
            dtrain=dtrain,
            num_boost_round=10,
-           obj=pk)
+           obj=pk)"""
+        reg = xgb.train({'tree_method': 'hist', 'seed': 1994, 'eta': 1e-1, 'objective': 'reg:squarederror'},  # any other tree method is fine.
+           dtrain=dtrain,
+           num_boost_round=10)
         regressors.append(reg)
     return regressors
 
@@ -216,7 +222,7 @@ def causal_augmentation(data: 'pd.DataFrame', causal_graph: nx.Graph, kernel: Gr
                 truncated_data = np.zeros_like(feature_list)
                 for i in range(len(leaf)):
                     truncated_data[feature_list[i]] = data[k, feature_list[i]]
-                try:
+                try: #senon riesci ti voglio bene lo stesso
                     # kernel_results.append(kernel(augmented_sample-truncated_data, feature))
                     kernel_results.append(kernel(augmented_sample-truncated_data, feature))
                 except:
@@ -255,7 +261,6 @@ def fast_causal_augmentation(data: 'pd.DataFrame', causal_graph: nx.Graph, kerne
         columns = data.columns
     data = np.array(data.sample(sample_size))
     i = -1
-
     for feature in tqdm(feature_list):
         i+=1
         new_dict = dict()
@@ -321,3 +326,89 @@ def get_default_kernel_functions_from_df(df: 'pd.DataFrame') -> List[Callable]:
         else:
             raise TypeError(f'{t} not supported')
     return kfs
+
+def causal_data_augmentation(d1: 'pd.DataFrame', d2: 'pd.DataFrame', causal_graph: nx.Graph, shift_variable: str, n: Optional[int] = None):
+    
+    feature_list = list(nx.topological_sort(causal_graph))
+
+    dependent_variables = []
+    independent_variables = []
+
+    i_shift = 0
+    for c in d2.columns:
+        if c == shift_variable:
+            break
+        else:
+            i_shift+=1
+
+    for node in causal_graph.nodes:
+        if node == shift_variable:
+            continue
+        if nx.has_path(causal_graph, i_shift, node):
+            dependent_variables.append(node)
+        else:
+            independent_variables.append(node)
+
+    source_data = np.array(d1)
+    target_data = np.array(d2)
+    if n is None:
+        data_aug = np.empty([source_data.shape[0], 0])
+    else:
+        data_aug = np.empty([n, 0])
+
+    features_so_far = {}
+
+    for i, feature in tqdm(enumerate(feature_list)):
+        features_so_far[feature] = i
+        new_values = []
+        predecessors = list(causal_graph.predecessors(feature)) + [feature]
+        if feature in independent_variables:
+            # sample from source domain
+            target_column = source_data[:,feature]
+            # domain = source_data[:,feature_list[:i+1]]
+            domain = source_data[:,predecessors]
+        else:
+            # sample on target domain by conditioning
+            target_column = target_data[:,feature]
+            domain = target_data[:,predecessors]
+        try:
+            dim_reduction = False
+            kernel = gaussian_kde(domain.T)
+        except:
+            dim_reduction = True
+            pca = PCA(n_components=0.99)
+            domain = pca.fit_transform(domain)
+            kernel = gaussian_kde(domain.T)
+        for sample in data_aug[:,[features_so_far[p] for p in predecessors if p!=feature]]:
+            repeated_samples = np.tile(sample,(len(target_column),1))
+            new_samples = np.hstack((repeated_samples, target_column.reshape((-1,1))))
+            if dim_reduction:
+                new_samples = pca.transform(new_samples)
+            try:
+                scores = kernel.pdf(new_samples.T)
+            except:
+                raise TypeError(f'Type of new_samples is {new_samples}, found types in new_samples {set([type(x) for x in new_samples.flatten()])}')
+            weights = scores/sum(scores)
+            if np.isnan(weights).any() or sum(scores)<=0:
+                # If there are nan values, replace them with a uniform distribution
+                weights = np.where(np.isnan(weights), 0, weights)
+                # Normalize the weights so they sum to 1
+                if np.sum(weights) <= 0:
+                    weights = np.ones_like(weights)/len(weights)
+                else:
+                    weights = weights / np.sum(weights)
+            weighted_mean = np.average(target_column, weights=weights)
+            weighted_std = np.sqrt(np.average((target_column - weighted_mean)**2, weights=weights))
+            # Calculate the interquartile range
+            iqr_value = iqr(target_column)
+            # Calculate the Silverman bandwidth
+            silverman_bandwidth = 0.9 * min(weighted_std, iqr_value / 1.34) * len(target_column) ** (-1/5)
+            
+            new_value = np.random.choice(target_column, p=weights)+np.random.normal(scale=silverman_bandwidth)
+            new_values.append(new_value)
+        data_aug = np.hstack((data_aug, np.reshape(new_values, (-1,1))))
+    
+    if isinstance(d1, pd.DataFrame):
+        return pd.DataFrame(data_aug, columns=d1.columns[feature_list])
+
+    return data_aug
