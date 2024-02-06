@@ -5,4 +5,4 @@ Run the notebook demo_final.ipynb to see the effects of causal data augmentation
 ## Exploring ACLED
 With the notebook acled_data_exploration.ipynb it is possible to explore data about fatatlities and unrest in the Sahel region, with valuable insights over the kind of data that predictive models have to manage.
 ## The dashboard
-Run dashboard.ipynb to see the results of the prediction of your run visualised, with possibilities of intraction.
+Run dashboard.ipynb to see the results of the prediction of your run visualised, with possibilities of interaction.
