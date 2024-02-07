@@ -12,6 +12,7 @@ Please, refere to the official [paper](https://github.com/AlbertoForesti/ADSP/bl
 ## References
 
 If you find this work useful, pleace cite the paper above as:
+
 @article{EWS_Sahel,
   title={A conflict early warning system for the Sahel region},
   author={Gabriele Cirotto, Alberto Foresti, Luca Varriale},
