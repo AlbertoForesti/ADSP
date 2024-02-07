@@ -9,17 +9,6 @@ Run dashboard.ipynb to see the results of the prediction of your run visualised,
 
 Please, refere to the official [paper](https://github.com/AlbertoForesti/ADSP/blob/master/paper.pdf) for further information.
 
-## References
-
-If you find this work useful, pleace cite the paper above as:
-
-```bibtex
-@article{EWS_Sahel,
-  title={A conflict early warning system for the Sahel region},
-  author={Gabriele Cirotto and Alberto Foresti and Luca Varriale},
-  year={2024}
-}
-
 ## Authors
 
 - [Gabriele Cirotto](https://github.com/CiroGab)
@@ -34,3 +23,14 @@ If you find this work useful, pleace cite the paper above as:
 ## Course Referent and Supervisor
 
 - Giuseppe Rizzo
+
+## References
+
+If you find this work useful, pleace cite the paper above as:
+
+```bibtex
+@article{EWS_Sahel,
+  title={A conflict early warning system for the Sahel region},
+  author={Gabriele Cirotto and Alberto Foresti and Luca Varriale},
+  year={2024}
+}
