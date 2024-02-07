@@ -7,7 +7,7 @@ With the notebook acled_data_exploration.ipynb it is possible to explore data ab
 ## The dashboard
 Run dashboard.ipynb to see the results of the prediction of your run visualised, with possibilities of interaction.
 
-Please, refere to the official [**paper**](https://github.com/AlbertoForesti/ADSP/blob/master/paper.pdf)) for further information.
+Please, refere to the official [paper](https://github.com/AlbertoForesti/ADSP/blob/master/paper.pdf) for further information.
 
 ## References
 
@@ -20,9 +20,9 @@ If you find this work useful, pleace cite the paper above as:
 
 ## Authors
 
-- [**Gabriele Cirotto**](https://github.com/CiroGab)
-- [**Alberto Foresti**](https://github.com/AlbertoForesti)
-- [**Luca Varriale**](https://github.com/lucavarriale99)
+- [Gabriele Cirotto](https://github.com/CiroGab)
+- [Alberto Foresti](https://github.com/AlbertoForesti)
+- [Luca Varriale](https://github.com/lucavarriale99)
 
 ## Mentors from United Nations System Staff College
 
